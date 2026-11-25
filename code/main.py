@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="경제력과 행복도 분석", layout="wide")
 st.title("📊 국가의 행복도는 경제력으로 나뉘는가?")
 
-# 2. 데이터 구축 (이전 데이터 재사용)
+# 2. 데이터 구축
 @st.cache_data
 def load_data():
     data = {
@@ -19,59 +19,66 @@ def load_data():
     return pd.DataFrame(data)
 
 raw_df = load_data()
-
-# --- [체크리스트 1 & 4: 데이터 개요 및 전처리 기준] ---
-st.header("1. 데이터 개요 및 전처리 (결측치 처리)")
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("원본 데이터")
-    st.write(f"- **행·열 수:** {raw_df.shape[0]}행, {raw_df.shape[1]}열")
-    st.write("- **각 열의 자료형:**")
-    st.write(raw_df.dtypes.astype(str))
-    st.write("- **결측치(빈 칸) 개수:**")
-    st.write(raw_df.isnull().sum())
-
+# 결측치 처리 (빈칸 삭제)
 clean_df = raw_df.dropna(subset=["1인당_GDP_달러", "행복_점수"]).copy()
 
-with col2:
-    st.subheader("전처리 결과")
-    st.error("**처리 기준:** 분석 핵심인 `1인당_GDP_달러`나 `행복_점수`가 빈칸(결측치)인 국가는 행 전체를 삭제함.")
-    st.write(f"- **처리 전:** {raw_df.shape[0]}행 ➔ **처리 후:** {clean_df.shape[0]}행")
+# --- [1단계: 데이터 개요] ---
+st.header("1. 데이터 개요 및 결측치 처리")
+with st.expander("데이터프레임 확인하기"):
+    st.write(f"원본 데이터: {raw_df.shape[0]}행 ➔ 전처리 후 데이터: {clean_df.shape[0]}행")
     st.dataframe(clean_df.style.format({"명목_GDP_억불": "{:,.0f}", "1인당_GDP_달러": "{:,.0f}", "행복_점수": "{:.3f}"}))
 
 
-# --- [체크리스트 2: 제목과 축 이름이 있는 그래프] ---
-st.header("2. 탐색적 데이터 분석 (산점도 그래프)")
+# --- [2단계: 개별 지표 분석 (GDP 따로, 행복도 따로)] ---
+st.header("2. 국가별 1인당 GDP 및 행복도 개별 분석")
+col1, col2 = st.columns(2)
 
-fig = px.scatter(
+with col1:
+    # 1인당 GDP 막대 그래프 (내림차순 정렬)
+    df_gdp = clean_df.sort_values(by="1인당_GDP_달러", ascending=True)
+    fig_gdp = px.bar(
+        df_gdp, 
+        x="1인당_GDP_달러", 
+        y="국가", 
+        orientation='h', 
+        title="[그림 1] 국가별 1인당 명목 GDP 순위", 
+        color="1인당_GDP_달러", 
+        color_continuous_scale="Blues"
+    )
+    st.plotly_chart(fig_gdp, use_container_width=True)
+
+with col2:
+    # 행복도 막대 그래프 (내림차순 정렬)
+    df_happy = clean_df.sort_values(by="행복_점수", ascending=True)
+    fig_happy = px.bar(
+        df_happy, 
+        x="행복_점수", 
+        y="국가", 
+        orientation='h', 
+        title="[그림 2] 국가별 행복도 점수 순위", 
+        color="행복_점수", 
+        color_continuous_scale="Greens"
+    )
+    # 점수 차이를 잘 보이게 하기 위해 X축 범위를 4~8로 설정
+    fig_happy.update_xaxes(range=[4, 7.5]) 
+    st.plotly_chart(fig_happy, use_container_width=True)
+
+
+# --- [3단계: 종합 비교 (상관관계 산점도)] ---
+st.header("3. 1인당 GDP와 행복도의 종합 상관관계 (비교)")
+
+# GDP와 행복도를 한 번에 띄워서 비교하는 산점도
+fig_scatter = px.scatter(
     clean_df, 
     x="1인당_GDP_달러", 
     y="행복_점수", 
     text="국가",
     size="명목_GDP_억불",
-    title="[그림 1] 1인당 GDP와 행복도 점수의 상관관계 (2026년 상위 12개국)",
+    title="[그림 3] 1인당 GDP와 행복도 점수 비교 산점도 (원 크기는 전체 GDP)",
     labels={"1인당_GDP_달러": "1인당 명목 GDP (USD)", "행복_점수": "행복도 점수 (10점 만점)"}
 )
-fig.update_traces(textposition='top center', marker=dict(color='royalblue', opacity=0.7))
-fig.update_layout(xaxis_tickformat=',', height=500)
+fig_scatter.update_traces(textposition='top center', marker=dict(color='royalblue', opacity=0.7))
+fig_scatter.update_layout(xaxis_tickformat=',', height=600)
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig_scatter, use_container_width=True)
 
-
-# --- [체크리스트 3 & 5: 근거 수치와 함께 말하기 & 처음 예상과 다르게 나온 점] ---
-st.header("3. 그래프 분석 결과 및 다음 계획 (★발표 대본)")
-
-st.info("""
-**[그래프에서 찾아낸 것 (수치 근거)]**  
-그래프를 보면 우상향하는 기본 추세는 있지만, 완벽하게 비례하지는 않습니다.  
-예를 들어, **대한민국**은 1인당 GDP가 **43,512달러**로 매우 높지만 행복 점수는 **6.040점**에 불과합니다.  
-반면, **브라질**은 1인당 GDP가 **12,397달러**로 한국의 3분의 1 수준에도 못 미치지만, 행복 점수는 **6.634점**으로 한국보다 훨씬 높게 나타났습니다.
-""")
-
-st.warning("""
-**[처음 예상과 다르게 나온 점 및 다음 분석에서 확인할 점]**  
-처음에는 **'돈이 많을수록 무조건 더 행복할 것'**이라고 예상했습니다.  
-하지만 브라질과 한국의 사례처럼 경제력만으로는 설명되지 않는 예외 그룹이 존재함을 확인했습니다.  
-따라서 다음 분석에서는 **'사회적 지원'** 같은 비경제적 요인을 변수로 추가하여, **군집 분석(Clustering)**을 통해 국가들이 어떻게 묶이는지 더 깊이 확인해 보겠습니다.
-""")
